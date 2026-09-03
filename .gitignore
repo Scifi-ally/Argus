@@ -18,6 +18,10 @@ venv/
 env/
 .env
 
+# Backups
+backups/
+*.zip
+
 # Editor & OS settings
 .vscode/
 .idea/
