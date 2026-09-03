@@ -1,0 +1,95 @@
+1
+00:00:00,000 --> 00:00:00,050
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775152] [longitude: -122.419400] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 0.00] [pitch: -30.00] [roll: 0.00]
+
+2
+00:00:00,050 --> 00:00:00,100
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775150] [longitude: -122.419365] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 15.00] [pitch: -30.00] [roll: 0.00]
+
+3
+00:00:00,100 --> 00:00:00,150
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775142] [longitude: -122.419332] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 30.00] [pitch: -30.00] [roll: 0.00]
+
+4
+00:00:00,150 --> 00:00:00,200
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775131] [longitude: -122.419303] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 45.00] [pitch: -30.00] [roll: 0.00]
+
+5
+00:00:00,200 --> 00:00:00,250
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775116] [longitude: -122.419282] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 60.00] [pitch: -30.00] [roll: 0.00]
+
+6
+00:00:00,250 --> 00:00:00,300
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775099] [longitude: -122.419268] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 75.00] [pitch: -30.00] [roll: 0.00]
+
+7
+00:00:00,300 --> 00:00:00,350
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775080] [longitude: -122.419263] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 90.00] [pitch: -30.00] [roll: 0.00]
+
+8
+00:00:00,350 --> 00:00:00,400
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775061] [longitude: -122.419268] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 105.00] [pitch: -30.00] [roll: 0.00]
+
+9
+00:00:00,400 --> 00:00:00,450
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775044] [longitude: -122.419282] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 120.00] [pitch: -30.00] [roll: 0.00]
+
+10
+00:00:00,450 --> 00:00:00,500
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775029] [longitude: -122.419303] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 135.00] [pitch: -30.00] [roll: 0.00]
+
+11
+00:00:00,500 --> 00:00:00,550
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775018] [longitude: -122.419332] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 150.00] [pitch: -30.00] [roll: 0.00]
+
+12
+00:00:00,550 --> 00:00:00,600
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775010] [longitude: -122.419365] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 165.00] [pitch: -30.00] [roll: 0.00]
+
+13
+00:00:00,600 --> 00:00:00,650
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775008] [longitude: -122.419400] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 180.00] [pitch: -30.00] [roll: 0.00]
+
+14
+00:00:00,650 --> 00:00:00,700
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775010] [longitude: -122.419435] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 195.00] [pitch: -30.00] [roll: 0.00]
+
+15
+00:00:00,700 --> 00:00:00,750
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775018] [longitude: -122.419468] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 210.00] [pitch: -30.00] [roll: 0.00]
+
+16
+00:00:00,750 --> 00:00:00,800
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775029] [longitude: -122.419497] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 225.00] [pitch: -30.00] [roll: 0.00]
+
+17
+00:00:00,800 --> 00:00:00,850
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775044] [longitude: -122.419518] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 240.00] [pitch: -30.00] [roll: 0.00]
+
+18
+00:00:00,850 --> 00:00:00,900
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775061] [longitude: -122.419532] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 255.00] [pitch: -30.00] [roll: 0.00]
+
+19
+00:00:00,900 --> 00:00:00,950
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775080] [longitude: -122.419537] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 270.00] [pitch: -30.00] [roll: 0.00]
+
+20
+00:00:00,950 --> 00:00:01,000
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775099] [longitude: -122.419532] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 285.00] [pitch: -30.00] [roll: 0.00]
+
+21
+00:00:01,000 --> 00:00:01,050
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775116] [longitude: -122.419518] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 300.00] [pitch: -30.00] [roll: 0.00]
+
+22
+00:00:01,050 --> 00:00:01,100
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775131] [longitude: -122.419497] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 315.00] [pitch: -30.00] [roll: 0.00]
+
+23
+00:00:01,100 --> 00:00:01,149
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775142] [longitude: -122.419468] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 330.00] [pitch: -30.00] [roll: 0.00]
+
+24
+00:00:01,149 --> 00:00:01,199
+[iso: 100] [shutter: 1/500] [fnum: 2.8] [latitude: 37.775150] [longitude: -122.419435] [rel_alt: 15.000] [abs_alt: 50.000] [yaw: 345.00] [pitch: -30.00] [roll: 0.00]
