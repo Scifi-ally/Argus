@@ -46,9 +46,19 @@ class SinglePass3DViewer {
     this.isDraggingModel = false;
     this.lastPointerX = 0;
     this.lastPointerY = 0;
+
+    // Spatial Analysis & 3D Ruler Measurement Toolkit
+    this.rulerActive = false;
+    this.rulerPoints = [];
+    this.rulerMarkers = [];
+    this.rulerLine = null;
+    this.measurementsData = null;
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
     
     this.initThree();
     this.setupModelDragControls();
+    this.setupRulerControls();
     this.setupEventListeners();
     this.loadJobList();
   }
@@ -198,10 +208,12 @@ class SinglePass3DViewer {
       
       // 4. Initialize Video Frame Stream
       this.initVideoFrameStream(jobId);
+      this.loadSpatialMeasurements();
       
       this.showToast(`Loaded ${jobId} successfully!`);
     } catch (err) {
       console.error('Failed to load job data:', err);
+      this.loadSpatialMeasurements();
       this.showToast(`Loaded ${jobId}`);
     }
   }
@@ -623,6 +635,157 @@ class SinglePass3DViewer {
     if (valY) valY.textContent = `${degY}°`;
   }
 
+  // --- 3D Ruler & Spatial Measurement Toolkit ---
+
+  setupRulerControls() {
+    const canvas = this.renderer.domElement;
+
+    canvas.addEventListener('click', (e) => {
+      if (!this.rulerActive || !this.modelMesh) return;
+
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      const intersects = this.raycaster.intersectObject(this.modelMesh, true);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        this.addRulerPoint(hit.point);
+      }
+    });
+  }
+
+  toggleRuler() {
+    this.rulerActive = !this.rulerActive;
+    const btn = document.getElementById('btn-tool-ruler');
+    const card = document.getElementById('spatial-card');
+    const canvas = this.renderer.domElement;
+
+    if (btn) btn.classList.toggle('active', this.rulerActive);
+
+    if (this.rulerActive) {
+      if (card) card.style.display = 'flex';
+      canvas.style.cursor = 'crosshair';
+      this.showToast('3D Ruler Active: Click 2 points on the model to measure distance & height');
+    } else {
+      canvas.style.cursor = this.interactionMode === 'rotate_model' ? 'grab' : 'default';
+      this.showToast('3D Ruler Disabled');
+    }
+  }
+
+  toggleSpatialAnalytics() {
+    const card = document.getElementById('spatial-card');
+    const btn = document.getElementById('btn-tool-analytics');
+    if (!card) return;
+
+    const isVisible = card.style.display !== 'none';
+    card.style.display = isVisible ? 'none' : 'flex';
+    if (btn) btn.classList.toggle('active', !isVisible);
+
+    if (!isVisible) {
+      this.loadSpatialMeasurements();
+    }
+  }
+
+  addRulerPoint(worldPoint) {
+    if (this.rulerPoints.length >= 2) {
+      this.clearRulerMeasurements();
+    }
+
+    this.rulerPoints.push(worldPoint.clone());
+
+    // Add marker sphere
+    const markerGeo = new THREE.SphereGeometry(0.35, 16, 16);
+    const markerMat = new THREE.MeshBasicMaterial({ color: this.rulerPoints.length === 1 ? 0xef4444 : 0x10b981 });
+    const marker = new THREE.Mesh(markerGeo, markerMat);
+    marker.position.copy(worldPoint);
+    this.scene.add(marker);
+    this.rulerMarkers.push(marker);
+
+    const inst = document.getElementById('measure-instruction');
+    const results = document.getElementById('measure-results');
+
+    if (this.rulerPoints.length === 1) {
+      if (inst) inst.textContent = 'Point 1 set. Click Point 2 on the model.';
+      if (results) results.style.display = 'none';
+    } else if (this.rulerPoints.length === 2) {
+      const p1 = this.rulerPoints[0];
+      const p2 = this.rulerPoints[1];
+
+      // Draw dimension line
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 3 });
+      this.rulerLine = new THREE.Line(lineGeo, lineMat);
+      this.scene.add(this.rulerLine);
+
+      // Metric calculations in real meters
+      const dist3d = p1.distanceTo(p2);
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const distXY = Math.sqrt(dx * dx + dy * dy);
+      const distZ = Math.abs(p2.z - p1.z);
+
+      if (inst) inst.textContent = 'Measurement computed between Point 1 & 2:';
+      if (results) results.style.display = 'block';
+
+      const el3d = document.getElementById('val-dist-3d');
+      const elXY = document.getElementById('val-dist-xy');
+      const elZ = document.getElementById('val-dist-z');
+
+      if (el3d) el3d.textContent = `${dist3d.toFixed(2)} m`;
+      if (elXY) elXY.textContent = `${distXY.toFixed(2)} m`;
+      if (elZ) elZ.textContent = `${distZ.toFixed(2)} m`;
+
+      this.showToast(`Measured 3D Distance: ${dist3d.toFixed(2)} m | Height: ${distZ.toFixed(2)} m`);
+    }
+  }
+
+  clearRulerMeasurements() {
+    this.rulerPoints = [];
+    this.rulerMarkers.forEach(m => this.scene.remove(m));
+    this.rulerMarkers = [];
+    if (this.rulerLine) {
+      this.scene.remove(this.rulerLine);
+      this.rulerLine = null;
+    }
+
+    const inst = document.getElementById('measure-instruction');
+    const results = document.getElementById('measure-results');
+    if (inst) inst.textContent = 'Click 2 points on the 3D model to measure distance & height.';
+    if (results) results.style.display = 'none';
+  }
+
+  async loadSpatialMeasurements() {
+    try {
+      const res = await fetch(`/outputs/${this.currentJob}/measurements.json`);
+      if (!res.ok) return;
+      const data = await res.json();
+      this.measurementsData = data;
+
+      const elFootprint = document.getElementById('val-footprint-area');
+      const elVolume = document.getElementById('val-built-volume');
+      const elGsd = document.getElementById('val-gsd');
+      const elElev = document.getElementById('val-elev-span');
+
+      if (elFootprint && data.projected_footprint_area_m2) {
+        elFootprint.textContent = `${data.projected_footprint_area_m2} m²`;
+      }
+      if (elVolume && data.estimated_above_ground_volume_m3) {
+        elVolume.textContent = `${data.estimated_above_ground_volume_m3} m³`;
+      }
+      if (elGsd && data.ground_sample_distance_m) {
+        elGsd.textContent = `${(data.ground_sample_distance_m * 100).toFixed(1)} cm/px`;
+      }
+      if (elElev && data.elevation_range_m?.span) {
+        elElev.textContent = `${data.elevation_range_m.span} m`;
+      }
+    } catch (e) {
+      console.log('No measurements.json for job:', e);
+    }
+  }
+
   // --- Orientation & View Controls ---
 
   rotateModel(axis, angleRad) {
@@ -883,6 +1046,40 @@ class SinglePass3DViewer {
       if (this.trajectoryGroup) this.trajectoryGroup.visible = this.showTrajectory;
       e.currentTarget.classList.toggle('active', this.showTrajectory);
     });
+
+    // 3D Ruler Tool
+    const btnToolRuler = document.getElementById('btn-tool-ruler');
+    if (btnToolRuler) {
+      btnToolRuler.addEventListener('click', () => {
+        this.toggleRuler();
+      });
+    }
+
+    // Spatial Analytics Card
+    const btnToolAnalytics = document.getElementById('btn-tool-analytics');
+    if (btnToolAnalytics) {
+      btnToolAnalytics.addEventListener('click', () => {
+        this.toggleSpatialAnalytics();
+      });
+    }
+
+    // Close Spatial Card
+    const btnCloseSpatial = document.getElementById('btn-close-spatial');
+    if (btnCloseSpatial) {
+      btnCloseSpatial.addEventListener('click', () => {
+        const card = document.getElementById('spatial-card');
+        if (card) card.style.display = 'none';
+        if (this.rulerActive) this.toggleRuler();
+      });
+    }
+
+    // Clear Measurement
+    const btnClearRuler = document.getElementById('btn-clear-ruler');
+    if (btnClearRuler) {
+      btnClearRuler.addEventListener('click', () => {
+        this.clearRulerMeasurements();
+      });
+    }
 
     // Reset View & Orientation
     document.getElementById('btn-reset-cam').addEventListener('click', () => {

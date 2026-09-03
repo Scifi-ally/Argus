@@ -75,17 +75,27 @@ class GenerativeCompleter:
             # Multi-View Silhouette & Depth Consistency Test:
             # Candidate must NOT project into any camera frame in front of an observed surface with higher depth
             consistent = True
-            for fid in trajectory.frame_ids[::3]:  # sample frames
+            for fid in trajectory.frame_ids[::4]:  # sample frames
                 pose = trajectory.get_pose(fid)
                 if pose is None:
                     continue
                 pt_c = pose.R_cw @ cand_pos + pose.t_cw
-                if pt_c[2] > 0.1:
+                z_c = float(pt_c[2])
+                if z_c > 0.1:
                     uv, in_bounds = self.camera.project(pt_c.reshape(1, 3))
                     if in_bounds[0]:
-                        # If candidate projects into camera view where no background was seen, pass
-                        pass
-                        
+                        u, v = int(round(uv[0, 0])), int(round(uv[0, 1]))
+                        # Candidate is geometrically valid if it does not violate free space
+                        # Check against nearest observed element along the ray
+                        near_eids = world.store.get_elements_in_radius(cand_pos, world.voxel_size_m * 2.0)
+                        if near_eids:
+                            # Confirmed proximity to valid surface boundary
+                            pass
+                        elif z_c < 1.0:
+                            # Too close to camera without supporting evidence
+                            consistent = False
+                            break
+                            
             if consistent:
                 gen_elem = WorldElement(
                     element_id=-1,

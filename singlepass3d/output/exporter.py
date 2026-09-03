@@ -230,6 +230,21 @@ class ReconstructionExporter:
         diag_logger = custom_logger or self.logger
         diag_logger.export_diagnostics(diag_path)
         exported_files["diagnostics.json"] = str(diag_path)
+
+        # 12. Geospatial Deliverables (Orthomosaic, DSM, DTM, Footprints GeoJSON, Measurements)
+        try:
+            from singlepass3d.output.geospatial_exporter import GeospatialExporter
+            geo_exporter = GeospatialExporter()
+            geo_files = geo_exporter.export_all_geospatial(
+                mesh=mesh,
+                output_dir=self.output_dir,
+                world=world,
+                trajectory=trajectory,
+                textured_mesh=textured_mesh
+            )
+            exported_files.update(geo_files)
+        except Exception as e:
+            self.logger.warning(f"Geospatial export skipped ({e}).")
         
-        self.logger.info("All 11 output files exported successfully.")
+        self.logger.info(f"All {len(exported_files)} output files exported successfully.")
         return exported_files

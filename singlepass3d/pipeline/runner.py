@@ -467,10 +467,18 @@ class SinglePass3DPipeline:
 
         # Seed the stereo depth range from the sparse structure rather than from a
         # hardcoded altitude guess.
-        scene_prior = sfm_landmarks if len(sfm_landmarks) else np.asarray(classical_landmarks, dtype=np.float64)
+        if len(sfm_landmarks):
+            scene_prior = np.asarray(sfm_landmarks, dtype=np.float64)
+        elif isinstance(classical_landmarks, dict) and len(classical_landmarks):
+            scene_prior = np.asarray(list(classical_landmarks.values()), dtype=np.float64)
+        elif isinstance(classical_landmarks, (list, np.ndarray)) and len(classical_landmarks):
+            scene_prior = np.asarray(classical_landmarks, dtype=np.float64)
+        else:
+            scene_prior = np.empty((0, 3), dtype=np.float64)
+
         prior_setter = getattr(adapter, "set_scene_prior", None)
         if prior_setter is not None and len(scene_prior):
-            prior_setter(np.asarray(scene_prior, dtype=np.float64).reshape(-1, 3))
+            prior_setter(scene_prior.reshape(-1, 3))
             self.logger.info(f"Dense stereo depth range seeded from {len(scene_prior)} sparse points.")
         self.logger.end_stage()
 
@@ -753,6 +761,8 @@ class SinglePass3DPipeline:
             smooth_iterations=self.config.preset.mesh_smooth_iterations,
             depth_trunc_m=self.config.mesh_depth_trunc_m,
             ground_align=self.config.mesh_ground_align,
+            target_mesh_faces=getattr(self.config.preset, "target_mesh_faces", 250000),
+            include_walls=getattr(self.config.preset, "include_walls", True),
         )
 
         # Volumetric fusion of the dense depth maps resolves far more detail than

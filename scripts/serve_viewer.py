@@ -98,7 +98,12 @@ class SinglePass3DHTTPHandler(http.server.SimpleHTTPRequestHandler):
             ".obj": "text/plain",
             ".ply": "application/octet-stream",
             ".mtl": "text/plain",
-            ".svg": "image/svg+xml"
+            ".svg": "image/svg+xml",
+            ".tif": "image/tiff",
+            ".tiff": "image/tiff",
+            ".tfw": "text/plain",
+            ".pgw": "text/plain",
+            ".geojson": "application/geo+json"
         }
         content_type = mime_types.get(ext, "application/octet-stream")
         

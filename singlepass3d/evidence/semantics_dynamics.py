@@ -32,14 +32,14 @@ class SemanticDynamicsFilter:
         counts: Dict[str, int] = {sc.value: 0 for sc in SemanticClass}
         dynamic_rejected_count = 0
         
-        # Calculate scene height distribution (ENU Z coordinates)
+        # Robust ground plane elevation datum (10th percentile of lowest points)
         positions = world.store.get_all_positions()
         if len(positions) == 0:
             return counts
             
-        z_min = float(np.min(positions[:, 2]))
+        z_ground = float(np.percentile(positions[:, 2], 10))
         z_max = float(np.max(positions[:, 2]))
-        z_range = max(1.0, z_max - z_min)
+        z_span = max(1.0, z_max - z_ground)
         
         for elem in world.store.elements.values():
             if elem.state == WorldElementState.REJECTED:
@@ -53,52 +53,70 @@ class SemanticDynamicsFilter:
             tot_rgb = max(1.0, r + g + b)
             
             # Normal verticality (ENU Z is up)
-            # nz ~ 1.0 -> horizontal facing up (ground or roof)
-            # nz ~ 0.0 -> vertical wall / facade
-            # nz < -0.2 -> facing downward / overhang
             nz = float(normal[2])
-            is_vertical = abs(nz) < 0.35
-            is_horizontal_up = nz > 0.70
+            is_vertical = abs(nz) < 0.40
+            is_horizontal_up = nz > 0.65
             
-            rel_height = (pos[2] - z_min) / z_range
+            # Elevation relative to estimated ground plane
+            delta_z = float(pos[2] - z_ground)
+            rel_height = max(0.0, delta_z / z_span)
             
-            # 1. Vegetation detection (Excess Green Index: 2G - R - B)
+            # Color metrics
             ex_green = (2.0 * g - r - b) / tot_rgb
-            if ex_green > 0.18 and not is_vertical:
+            saturation = (max(r, g, b) - min(r, g, b)) / max(1.0, max(r, g, b))
+            
+            # 1. Vegetation (Excess Green Index or high non-vertical foliage)
+            if ex_green > 0.14 and not is_vertical and delta_z > -0.5:
                 elem.semantic_class = SemanticClass.VEGETATION
                 elem.dynamic_probability = 0.05
-            # 2. Water detection (Blue-Green dominant with low variance, flat, low altitude)
-            elif (b > r + 15) and is_horizontal_up and rel_height < 0.15:
+            # 2. Water (Blue-dominant, low variance, flat, near ground level)
+            elif (b > r + 12 and b > g + 8) and is_horizontal_up and delta_z <= 1.0:
                 elem.semantic_class = SemanticClass.WATER
-                elem.dynamic_probability = 0.10
-            # 3. Facade / Vertical Wall
-            elif is_vertical and rel_height > 0.10:
+                elem.dynamic_probability = 0.05
+            # 3. Dynamic Moving Vehicle or Pedestrian Detection:
+            # Sits just above road level (0.2m - 2.8m), with transient observation count or high reprojection residual
+            elif 0.20 <= delta_z <= 2.8 and (elem.reprojection_error > 2.2 or elem.observation_count <= 2):
+                if delta_z <= 2.0 and saturation > 0.15:
+                    elem.semantic_class = SemanticClass.VEHICLE
+                    elem.dynamic_probability = 0.85
+                    elem.state = WorldElementState.REJECTED
+                    dynamic_rejected_count += 1
+                    counts[elem.semantic_class.value] += 1
+                    continue
+                elif delta_z <= 1.8:
+                    elem.semantic_class = SemanticClass.PERSON
+                    elem.dynamic_probability = 0.80
+                    elem.state = WorldElementState.REJECTED
+                    dynamic_rejected_count += 1
+                    counts[elem.semantic_class.value] += 1
+                    continue
+            # 4. Facade / Vertical Architectural Wall
+            elif is_vertical and delta_z > 1.2:
                 elem.semantic_class = SemanticClass.FACADE
                 elem.dynamic_probability = 0.0
-            # 4. Roof (Elevated horizontal surface)
-            elif is_horizontal_up and rel_height > 0.35:
+            # 5. Roof (Elevated horizontal architectural surface)
+            elif is_horizontal_up and delta_z > 2.8:
                 elem.semantic_class = SemanticClass.ROOF
                 elem.dynamic_probability = 0.0
-            # 5. Road / Pavement (Dark low surface with low saturation)
-            elif is_horizontal_up and rel_height <= 0.25 and tot_rgb < 280:
+            # 6. Road / Asphalt Pavement (Flat, near ground level, neutral low-saturation color)
+            elif is_horizontal_up and -0.8 <= delta_z <= 0.4 and saturation < 0.20 and tot_rgb < 360:
                 elem.semantic_class = SemanticClass.ROAD
                 elem.dynamic_probability = 0.0
-            # 6. General Ground
-            elif rel_height <= 0.30:
+            # 7. General Terrain / Ground
+            elif delta_z <= 0.8:
                 elem.semantic_class = SemanticClass.GROUND
                 elem.dynamic_probability = 0.0
-            # 7. Building General
-            elif rel_height > 0.25:
+            # 8. Building Envelope (General structure)
+            elif delta_z > 2.0:
                 elem.semantic_class = SemanticClass.BUILDING
                 elem.dynamic_probability = 0.0
             else:
                 elem.semantic_class = SemanticClass.UNKNOWN
                 
-            # Dynamic Object Check:
-            # If observation count is low (1) in an open road/ground area, or fast moving color signature
+            # Secondary dynamic check for transient ground outliers
             if elem.observation_count == 1 and elem.semantic_class in [SemanticClass.ROAD, SemanticClass.GROUND]:
-                if elem.reprojection_error > 3.0:
-                    elem.dynamic_probability = 0.85
+                if elem.reprojection_error > 2.5:
+                    elem.dynamic_probability = 0.80
                     elem.state = WorldElementState.REJECTED
                     dynamic_rejected_count += 1
                     continue
@@ -106,6 +124,8 @@ class SemanticDynamicsFilter:
             counts[elem.semantic_class.value] += 1
             
         self.logger.info(
-            f"Semantic classification complete: Facade={counts['facade']}, Roof={counts['roof']}, Ground={counts['ground']}, Vegetation={counts['vegetation']}, Road={counts['road']}, Filtered Dynamics={dynamic_rejected_count}"
+            f"Semantic classification complete: Facade={counts['facade']}, Roof={counts['roof']}, "
+            f"Ground={counts['ground']}, Road={counts['road']}, Vegetation={counts['vegetation']}, "
+            f"Vehicles={counts['vehicle']}, Pedestrians={counts['person']}, Filtered Dynamics={dynamic_rejected_count}"
         )
         return counts

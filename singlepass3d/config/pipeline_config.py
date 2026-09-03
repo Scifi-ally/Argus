@@ -76,6 +76,9 @@ class QualityPreset:
 
     # --- Mesh finishing ---
     mesh_smooth_iterations: int = 0  # 0 = keep crisp ridges and corners
+    target_mesh_faces: int = 250000   # Quadric error decimation target for sharp UV texturing
+    include_walls: bool = True       # Extrude rear/side walls under observed roofs for single-pass blind spots
+    export_geospatial: bool = True   # Generate Orthomosaic & DSM GeoTIFF rasters
 
 
 PRESETS: Dict[str, QualityPreset] = {
@@ -102,6 +105,8 @@ PRESETS: Dict[str, QualityPreset] = {
         mvs_zncc_win=7,
         tsdf_voxel_m=0.14,
         keyframe_max_frame_gap=10,
+        target_mesh_faces=150000,
+        include_walls=True,
     ),
     "balanced": QualityPreset(
         name="balanced",
@@ -133,6 +138,8 @@ PRESETS: Dict[str, QualityPreset] = {
         mvs_zncc_win=9,
         tsdf_voxel_m=0.10,
         keyframe_max_frame_gap=8,
+        target_mesh_faces=250000,
+        include_walls=True,
     ),
     "high": QualityPreset(
         name="high",
@@ -157,6 +164,8 @@ PRESETS: Dict[str, QualityPreset] = {
         mvs_zncc_win=13,   # 1280 * 0.0094, the ratio that holds the patch size
         tsdf_voxel_m=0.07,
         keyframe_max_frame_gap=6,
+        target_mesh_faces=350000,
+        include_walls=True,
     ),
     "ultra": QualityPreset(
         name="ultra",
@@ -181,6 +190,8 @@ PRESETS: Dict[str, QualityPreset] = {
         mvs_zncc_win=19,   # 1920 * 0.0094; an 11 px window here loses half the coverage
         tsdf_voxel_m=0.05,
         keyframe_max_frame_gap=5,
+        target_mesh_faces=500000,
+        include_walls=True,
     ),
 }
 
@@ -273,6 +284,10 @@ class SinglePass3DConfig:
     texture_full_resolution: bool = True
     mesh_depth_trunc_m: float = 150.0
     mesh_ground_align: bool = True
+    target_mesh_faces: int = 250000
+    include_walls: bool = True
+    export_geospatial: bool = True
+    ortho_gsd_m: float = 0.05
     
     # Quality Gates
     max_trajectory_drift_m: float = 2.5

@@ -440,7 +440,8 @@ class TextureSynthesizer:
         # One texel per ground sample of the imagery: finer invents detail, coarser
         # throws away what the frames already resolved.
         gsd = max(1e-4, z_med / max(1.0, float(cam_ref.fx)))
-        cell = int(np.clip(round(edge / gsd), 1, 8))
+        max_cell = 16 if max_atlas_px >= 4096 else 8
+        cell = int(np.clip(round(edge / gsd), 2, max_cell))
         grid = int(np.ceil(np.sqrt(n_f)))
         # A finer mesh is worth more than a finer texture once the triangles are already
         # smaller than the ground sample of the imagery, which is where this fusion now

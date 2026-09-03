@@ -84,6 +84,41 @@ def enu_to_ecef(enu: np.ndarray, ref_lat: float, ref_lon: float, ref_alt: float)
     return ref_ecef + (R.T @ enu)
 
 
+def ecef_to_geodetic(ecef: np.ndarray) -> Tuple[float, float, float]:
+    """
+    Convert ECEF XYZ coordinates (meters) to WGS84 Geodetic (lat, lon degrees, alt meters)
+    using Bowring's closed-form method.
+    """
+    x, y, z = float(ecef[0]), float(ecef[1]), float(ecef[2])
+    p = np.sqrt(x**2 + y**2)
+    if p < 1e-6:
+        lat = 90.0 if z > 0 else -90.0
+        return lat, 0.0, float(abs(z) - WGS84_B)
+    
+    e_prime2 = (WGS84_A**2 - WGS84_B**2) / (WGS84_B**2)
+    theta = np.arctan2(z * WGS84_A, p * WGS84_B)
+    
+    lat = np.arctan2(
+        z + e_prime2 * WGS84_B * (np.sin(theta)**3),
+        p - WGS84_E2 * WGS84_A * (np.cos(theta)**3)
+    )
+    lon = np.arctan2(y, x)
+    
+    sin_lat = np.sin(lat)
+    N = WGS84_A / np.sqrt(1.0 - WGS84_E2 * sin_lat**2)
+    alt = p / np.cos(lat) - N
+    
+    return float(np.degrees(lat)), float(np.degrees(lon)), float(alt)
+
+
+def enu_to_geodetic(enu: np.ndarray, ref_lat: float, ref_lon: float, ref_alt: float) -> Tuple[float, float, float]:
+    """
+    Convert local ENU coordinates directly to WGS84 Geodetic (lat, lon, alt).
+    """
+    ecef = enu_to_ecef(enu, ref_lat, ref_lon, ref_alt)
+    return ecef_to_geodetic(ecef)
+
+
 def normalize_timestamps(raw: np.ndarray) -> np.ndarray:
     """
     Convert a whole column of log timestamps to seconds using one divisor.

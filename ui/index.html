@@ -117,9 +117,44 @@
           <button class="action-btn active" id="btn-toggle-trajectory" title="Toggle Flight Trajectory">
             <span>Trajectory</span>
           </button>
+          <button class="action-btn" id="btn-tool-ruler" title="3D Ruler: Click 2 points to measure distance & height (m)">
+            <span>📏 Ruler</span>
+          </button>
+          <button class="action-btn" id="btn-tool-analytics" title="Spatial Analytics: View area, volume, and GIS metrics">
+            <span>📊 Analytics</span>
+          </button>
           <button class="action-btn" id="btn-reset-cam" title="Reset View & Orientation">
             <span>Reset</span>
           </button>
+        </div>
+
+        <!-- Floating Spatial Measurements & Analytics Card -->
+        <div class="spatial-analytics-card" id="spatial-card" style="display: none;">
+          <div class="rot-card-header">
+            <span class="rot-card-title">📏 3D Spatial Measurements</span>
+            <button class="rot-card-reset" id="btn-close-spatial">✕</button>
+          </div>
+          <div class="spatial-content">
+            <div class="measure-hud" id="measure-hud-live">
+              <div class="measure-instruction" id="measure-instruction">Click 2 points on the 3D model to measure distance & height.</div>
+              <div class="measure-results" id="measure-results" style="display: none;">
+                <div class="metric-row"><span class="metric-label">3D Distance:</span> <strong id="val-dist-3d">0.00 m</strong></div>
+                <div class="metric-row"><span class="metric-label">Horizontal Span:</span> <span id="val-dist-xy">0.00 m</span></div>
+                <div class="metric-row"><span class="metric-label">Vertical Height (ΔZ):</span> <strong id="val-dist-z" style="color: #38bdf8;">0.00 m</strong></div>
+                <button class="rot-card-reset" id="btn-clear-ruler" style="margin-top: 6px;">Clear Measurement</button>
+              </div>
+            </div>
+            <div class="rot-divider" style="margin: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);"></div>
+            <div class="gis-metrics-section" id="gis-metrics-section">
+              <div class="rot-card-title" style="font-size: 11px; margin-bottom: 6px; color: #94a3b8;">Tactical Reconnaissance Metrics</div>
+              <div class="metric-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+                <div class="grid-item"><span style="color: #64748b; display:block;">Footprint Area</span><strong id="val-footprint-area" style="color: #f8fafc;">-- m²</strong></div>
+                <div class="grid-item"><span style="color: #64748b; display:block;">Est. Volume</span><strong id="val-built-volume" style="color: #f8fafc;">-- m³</strong></div>
+                <div class="grid-item"><span style="color: #64748b; display:block;">Ground GSD</span><strong id="val-gsd" style="color: #f8fafc;">5.0 cm/px</strong></div>
+                <div class="grid-item"><span style="color: #64748b; display:block;">Elevation Span</span><strong id="val-elev-span" style="color: #f8fafc;">-- m</strong></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Floating Model Orientation Control Card -->

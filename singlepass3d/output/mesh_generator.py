@@ -38,6 +38,8 @@ class MeshGenerator:
         depth_trunc_m: float = 150.0,
         ground_align: bool = True,
         complete_surface: bool = True,
+        target_mesh_faces: int = 250000,
+        include_walls: bool = True,
     ):
         self.algorithm = algorithm.lower()
         self.poisson_depth = int(poisson_depth)
@@ -48,6 +50,8 @@ class MeshGenerator:
         self.depth_trunc_m = float(depth_trunc_m)
         self.ground_align = bool(ground_align)
         self.complete_surface = bool(complete_surface)
+        self.target_mesh_faces = int(target_mesh_faces) if target_mesh_faces is not None else 250000
+        self.include_walls = bool(include_walls)
         # Set when completion runs: the LOD1 wall shell implied by the observed
         # roofs, exported beside the model rather than merged into it.
         self.last_envelope = None
@@ -837,16 +841,84 @@ class MeshGenerator:
         if self.complete_surface and len(mesh.faces) > 5000:
             from singlepass3d.completion.surface_completion import SurfaceCompleter
 
-            completer = SurfaceCompleter()
+            completer = SurfaceCompleter(include_walls=self.include_walls)
             # The implied building envelope is computed from the measured mesh, before
             # the gap fill is folded in, and kept aside for its own artifact.
             self.last_envelope = completer.envelope(mesh)
             mesh = completer.complete(mesh)
 
+        # Quadric Error Decimation simplifies planar surfaces and terrain while preserving
+        # sharp building corners and roof ridges. This directly avoids 1-texel/triangle
+        # texture degradation during UV atlas synthesis.
+        if self.target_mesh_faces > 0 and len(mesh.faces) > self.target_mesh_faces:
+            mesh = self._simplify_quadric_decimation(mesh, target_faces=self.target_mesh_faces)
+
         self.logger.info(
             f"Final mesh: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces."
         )
         return mesh
+
+    def _simplify_quadric_decimation(
+        self, mesh: trimesh.Trimesh, target_faces: int = 250000
+    ) -> trimesh.Trimesh:
+        """
+        Simplifies dense TSDF volumetric mesh using Quadric Error Decimation.
+        Preserves geometric feature edges while reducing triangle density so UV atlas
+        cells receive rich multi-texel photographic resolution.
+        """
+        if len(mesh.faces) <= target_faces:
+            return mesh
+        try:
+            import open3d as o3d
+
+            self.logger.info(
+                f"Simplifying mesh via Quadric Decimation: {len(mesh.faces)} -> target {target_faces} faces..."
+            )
+            mo = o3d.geometry.TriangleMesh(
+                o3d.utility.Vector3dVector(np.asarray(mesh.vertices, dtype=np.float64)),
+                o3d.utility.Vector3iVector(np.asarray(mesh.faces, dtype=np.int32)),
+            )
+            if mesh.visual is not None and getattr(mesh.visual, "vertex_colors", None) is not None:
+                vc = np.asarray(mesh.visual.vertex_colors)
+                if vc.ndim == 2 and len(vc) == len(mesh.vertices):
+                    mo.vertex_colors = o3d.utility.Vector3dVector(
+                        np.clip(vc[:, :3].astype(np.float64) / 255.0, 0.0, 1.0)
+                    )
+            simplified_o3d = mo.simplify_quadric_decimation(target_number_of_triangles=target_faces)
+            simplified_o3d.remove_degenerate_triangles()
+            simplified_o3d.remove_duplicated_triangles()
+            simplified_o3d.remove_duplicated_vertices()
+            simplified_o3d.remove_non_manifold_edges()
+            simplified_o3d.remove_unreferenced_vertices()
+
+            verts = np.asarray(simplified_o3d.vertices)
+            faces = np.asarray(simplified_o3d.triangles)
+            if len(faces) == 0:
+                self.logger.warning("Decimation returned empty faces; keeping original mesh.")
+                return mesh
+
+            colors = None
+            if simplified_o3d.has_vertex_colors():
+                colors = (np.clip(np.asarray(simplified_o3d.vertex_colors), 0.0, 1.0) * 255.0).astype(np.uint8)
+                if colors.shape[1] == 3:
+                    alpha = np.full((len(colors), 1), 255, dtype=np.uint8)
+                    colors = np.hstack([colors, alpha])
+
+            decimated = trimesh.Trimesh(
+                vertices=verts,
+                faces=faces,
+                vertex_colors=colors,
+                process=False
+            )
+            decimated.metadata = dict(mesh.metadata or {})
+            self.logger.info(
+                f"Quadric decimation complete: {len(decimated.vertices)} vertices, "
+                f"{len(decimated.faces)} faces (optimal for high-res UV atlas)."
+            )
+            return decimated
+        except Exception as exc:
+            self.logger.warning(f"Quadric decimation skipped ({exc}); retaining mesh.")
+            return mesh
 
     def _repair_topology(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
