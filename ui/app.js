@@ -164,16 +164,34 @@ class SinglePass3DViewer {
         const sel = document.getElementById('job-selector');
         sel.innerHTML = '';
         
-        jobs.sort((a, b) => (a.includes('zurich') ? -1 : 1));
+        const friendlyLabels = {
+          'church_orbit': 'Historic Church Aerial Orbit (New Video Input)',
+          'agz_optA': 'Option A: Reference-Guided UV Inpainting (Sharpest Texture)',
+          'agz_optB': 'Option B: Multi-View Generative Gap Closure (Continuous Mesh)',
+          'agz_optC': 'Option C: Targeted Courtyard Patch (Closed Sign & Column)',
+          'agz_v12': 'AGZ v12 (Restored Background Building + Sharp Baseline)',
+          'zurich_mav_reconstruction': 'Zurich Urban MAV (Production 3D Model)',
+          'zurich_mav_high_res': 'Zurich Urban MAV (Ultra High-Res)',
+          'city_orbit_high_res': 'City Orbit Flight (360° Panoramic)',
+          'loop_closure_high_res': 'Loop Closure Flight (Drift-Corrected)',
+          'agz_full': 'Air-Ground Zurich (Full Continuous)',
+          'job_orbit_high': 'High-Density Orbit Survey',
+          'job_001': 'Drone Orbit Survey (Demo 001)'
+        };
 
         jobs.forEach(job => {
           const opt = document.createElement('option');
           opt.value = job;
-          opt.textContent = `${job} (${job.includes('zurich') ? 'Zurich Urban MAV' : 'Orbit Demo'})`;
+          opt.textContent = friendlyLabels[job] || job;
           sel.appendChild(opt);
         });
 
-        if (jobs.length > 0) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedJob = urlParams.get('job');
+        if (requestedJob && jobs.includes(requestedJob)) {
+          this.currentJob = requestedJob;
+          sel.value = this.currentJob;
+        } else if (jobs.length > 0) {
           this.currentJob = jobs[0];
           sel.value = this.currentJob;
         }

@@ -276,7 +276,8 @@ class MeshGenerator:
             if z_ref > 0.0 and s_ref is not None and s_ref > 1e-4:
                 z_lim = z_ref * float(np.sqrt(max(2.0 * voxel, 1e-6) / s_ref))
                 if z_lim < float(np.percentile(z_all, 99.0)):
-                    z_cut = max(z_lim, float(np.percentile(z_all, 55)))
+                    # Allow near high-res band to cover full courtyard/background facade depth
+                    z_cut = max(z_lim, float(np.percentile(z_all, 75)))
                     voxel = size_for(0.0, z_cut) or voxel
                     self.logger.info(
                         f"Triangulation precision at {z_ref:.1f} m is {s_ref * 100:.1f} cm and "
@@ -287,7 +288,7 @@ class MeshGenerator:
             beyond = float((z_all >= z_cut).mean()) if z_all is not None else 0.0
             far_voxel = size_for(z_cut, float("inf"))
             if far_voxel is not None:
-                far_voxel = float(max(far_voxel, voxel * 1.5))
+                far_voxel = float(max(far_voxel, voxel * 1.35))
             if beyond < 0.05 or far_voxel is None:
                 far_voxel = None
         if first is not None:
@@ -330,7 +331,7 @@ class MeshGenerator:
                     f"{voxel * 100:.1f} cm to {needed * 100:.1f} cm to stay within memory."
                 )
                 if far_voxel is not None:
-                    far_voxel = max(far_voxel, needed * 1.5)
+                    far_voxel = max(far_voxel, needed * 1.35)
             voxel = float(needed)
         # One far band is not enough. Precision falls off as range squared, so a band
         # that starts at the right voxel is already too fine by a factor of two after
@@ -343,16 +344,17 @@ class MeshGenerator:
         # than the fine ones -- exactly the right behaviour that far out.
         bands: List[Tuple[float, float, float]] = [(0.0, float(z_cut), float(voxel))]
         if far_voxel is not None and np.isfinite(z_cut):
-            z_top = float(np.percentile(z_all, 99.5)) if z_all is not None else float("inf")
+            # Cap far field ladder at 45m to prevent noisy sky/horizon ray integration into coarse blocks
+            z_top = min(45.0, float(np.percentile(z_all, 98.0)) if z_all is not None else 45.0)
             lo, vx = float(z_cut), float(far_voxel)
             while lo < z_top and len(bands) < 7:
-                hi = lo * 1.4142135623730951
-                if vx > 0.60 or hi >= z_top:
+                hi = lo * 1.35
+                if vx > 0.35 or hi >= z_top:
                     hi = float("inf")
                 bands.append((lo, hi, vx))
                 if not np.isfinite(hi):
                     break
-                lo, vx = hi, min(vx * 2.0, 2.0)
+                lo, vx = hi, min(vx * 1.5, 0.40)
         self._bands = bands
         if len(bands) > 2:
             ladder = ", ".join(
@@ -852,6 +854,10 @@ class MeshGenerator:
         # texture degradation during UV atlas synthesis.
         if self.target_mesh_faces > 0 and len(mesh.faces) > self.target_mesh_faces:
             mesh = self._simplify_quadric_decimation(mesh, target_faces=self.target_mesh_faces)
+            if len(mesh.faces) > 0:
+                mesh.update_faces(mesh.nondegenerate_faces())
+                mesh.update_faces(mesh.area_faces > 1e-10)
+            mesh.remove_unreferenced_vertices()
 
         self.logger.info(
             f"Final mesh: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces."
@@ -1157,80 +1163,135 @@ class MeshGenerator:
 
     def _drop_islands(self, mesh: trimesh.Trimesh, coarsest: float) -> trimesh.Trimesh:
         """
-        Removes surface that floats free of the reconstructed body.
-
-        Fusion produces two kinds of shell. Most of them continue a surface that the
-        near band already resolved, and those sit right on it: measured across a full
-        AGZ fusion, every shell belonging to a facade lies within 2 cm of the fine
-        mesh. The rest hang in space 6 to 32 m out, chains of coarse fragments strung
-        along the viewing directions where the drone's 4 m of travel gives no real
-        parallax. They survive the per-band area floor because they are not small --
-        one measured 349 m2 across a 50 m diagonal -- so area cannot separate them.
-        Distance can, and by a wide margin: there is nothing between 2 cm and 6 m.
+        Intelligent Scene-Aware Geometry Filter:
+        1. Anchors all substantial architectural and ground structures (e.g. background buildings,
+           courtyards, secondary roofs). Real buildings are never treated as islands.
+        2. Specifically detects and purges far-field sky and epipolar ray streaks (deep underground
+           or far out in the void beyond the flight corridor).
+        3. Culls tiny floating crumbs (< 300 faces, < 0.5 m2) that read as lace.
+        4. Retains any medium structures within a generous urban gap tolerance (18-25 m) across
+           courtyards and streets.
         """
         import open3d as o3d
 
         if len(mesh.faces) < 5000:
             return mesh
-        om = o3d.geometry.TriangleMesh(
-            o3d.utility.Vector3dVector(np.asarray(mesh.vertices, dtype=np.float64)),
-            o3d.utility.Vector3iVector(np.asarray(mesh.faces, dtype=np.int32)),
-        )
-        lab, cnt, area = om.cluster_connected_triangles()
-        lab = np.asarray(lab)
-        cnt = np.asarray(cnt)
-        area = np.asarray(area)
-        if cnt.size < 2:
-            return mesh
-        tc = np.asarray(mesh.triangles_center, dtype=np.float64)
-        # The body is the finest-grained large surface: triangle area per face tells
-        # the bands apart, and the near band is where the imagery actually resolved
-        # something. If that is not most of the mesh, fall back to the biggest shell.
-        mpk = area / np.maximum(cnt / 1000.0, 1e-9)
-        fine = int(np.argmax(cnt))
-        body = np.where((mpk <= 2.5 * mpk[fine]) & (cnt >= 20000))[0]
-        if body.size == 0 or float(cnt[body].sum()) < 0.25 * len(mesh.faces):
-            body = np.array([fine])
-        in_body = np.isin(lab, body)
-        if in_body.all():
-            return mesh
-        ref = tc[in_body]
-        step = max(1, ref.shape[0] // 200000)
-        tree = o3d.geometry.KDTreeFlann(
-            o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref[::step]))
-        )
-        limit = max(1.0, 8.0 * float(coarsest))
-        keep = in_body.copy()
-        dropped_f = 0
-        dropped_c = 0
-        worst = 0.0
-        for i in range(cnt.size):
-            if i in body:
-                continue
-            sel = np.flatnonzero(lab == i)
-            if sel.size == 0:
-                continue
-            probe = sel[:: max(1, sel.size // 300)]
-            d = np.fromiter(
-                (tree.search_knn_vector_3d(tc[j], 1)[2][0] for j in probe),
-                dtype=np.float64,
-                count=probe.size,
+        try:
+            om = o3d.geometry.TriangleMesh(
+                o3d.utility.Vector3dVector(np.asarray(mesh.vertices, dtype=np.float64)),
+                o3d.utility.Vector3iVector(np.asarray(mesh.faces, dtype=np.int32)),
             )
-            near = float(np.sqrt(np.percentile(d, 5.0)))
-            if near <= limit:
-                keep[sel] = True
-            else:
-                dropped_f += int(sel.size)
-                dropped_c += 1
-                worst = max(worst, near)
-        if dropped_f == 0:
+            lab, cnt, area = om.cluster_connected_triangles()
+            lab = np.asarray(lab)
+            cnt = np.asarray(cnt)
+            area = np.asarray(area)
+            if cnt.size < 2:
+                return mesh
+
+            verts = np.asarray(mesh.vertices, dtype=np.float64)
+            faces = np.asarray(mesh.faces, dtype=np.int32)
+            tc = np.asarray(mesh.triangles_center, dtype=np.float64)
+
+            # 1. Establish core scene bounding box from the top components representing >= 70% of faces
+            top_indices = np.argsort(cnt)[::-1]
+            cum_faces = np.cumsum(cnt[top_indices])
+            major_cutoff = np.searchsorted(cum_faces, 0.70 * len(mesh.faces))
+            major_comps = top_indices[:max(2, major_cutoff + 1)]
+
+            major_faces = np.isin(lab, major_comps)
+            major_v_idx = np.unique(faces[major_faces])
+            core_min = verts[major_v_idx].min(axis=0)
+            core_max = verts[major_v_idx].max(axis=0)
+            core_center = 0.5 * (core_min + core_max)
+            core_diag = float(np.linalg.norm(core_max - core_min))
+
+            # 2. Classify clusters: anchors, far-field sky/depth streaks, tiny crumbs
+            anchors = []
+            drop_mask = np.zeros(cnt.size, dtype=bool)
+            dropped_f = 0
+            dropped_c = 0
+            worst = 0.0
+
+            for i in range(cnt.size):
+                sel = np.flatnonzero(lab == i)
+                c_verts = verts[np.unique(faces[sel])]
+                c_min = c_verts.min(axis=0)
+                c_max = c_verts.max(axis=0)
+                c_cen = 0.5 * (c_min + c_max)
+
+                # Check if it's underground ray noise, high sky streak, or far-out sparse ray
+                is_deep_underground = c_cen[2] < (core_min[2] - 8.0)
+                is_high_sky = c_cen[2] > (core_max[2] + 15.0)
+                dist_from_core_center = float(np.linalg.norm(c_cen[:2] - core_center[:2]))
+                is_far_out = dist_from_core_center > max(35.0, core_diag * 1.2)
+
+                if is_deep_underground or is_high_sky or (is_far_out and cnt[i] < 3000):
+                    drop_mask[i] = True
+                    dropped_f += int(sel.size)
+                    dropped_c += 1
+                    worst = max(worst, dist_from_core_center)
+                    continue
+
+                # Tiny disconnected crumbs that cause lace
+                if cnt[i] < 300 and area[i] < 0.5:
+                    drop_mask[i] = True
+                    dropped_f += int(sel.size)
+                    dropped_c += 1
+                    continue
+
+                # Substantial structures are automatically anchored
+                if cnt[i] >= 800 or area[i] >= 2.5:
+                    anchors.append(i)
+
+            if not anchors:
+                anchors = [int(top_indices[0])]
+
+            in_anchors = np.isin(lab, anchors)
+            keep = in_anchors.copy()
+
+            # 3. For any remaining unclassified medium components, test proximity to ANY anchored building
+            ref = tc[in_anchors]
+            step = max(1, ref.shape[0] // 200000)
+            tree = o3d.geometry.KDTreeFlann(
+                o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref[::step]))
+            )
+
+            # Realistic urban gap tolerance: allows courtyard / street spacing (18-25m)
+            urban_gap_limit = max(18.0, 25.0 * float(coarsest))
+
+            for i in range(cnt.size):
+                if in_anchors[i] or drop_mask[i]:
+                    continue
+                sel = np.flatnonzero(lab == i)
+                if sel.size == 0:
+                    continue
+                probe = sel[::max(1, sel.size // 300)]
+                d = np.fromiter(
+                    (tree.search_knn_vector_3d(tc[j], 1)[2][0] for j in probe),
+                    dtype=np.float64,
+                    count=probe.size,
+                )
+                near = float(np.sqrt(np.percentile(d, 5.0)))
+                if near <= urban_gap_limit:
+                    keep[sel] = True
+                else:
+                    dropped_f += int(sel.size)
+                    dropped_c += 1
+                    worst = max(worst, near)
+
+            if dropped_f == 0:
+                return mesh
+
+            out = mesh.submesh([np.flatnonzero(keep)], append=True, repair=False)
+            self.logger.info(
+                f"Intelligent geometry filter: retained {len(anchors)} architectural structures "
+                f"({len(out.faces)} faces, kept {len(out.faces)/len(mesh.faces)*100:.1f}%), "
+                f"purged {dropped_c} stray sky/debris shells ({dropped_f} faces, furthest {worst:.0f} m out)."
+            )
+            return out
+        except Exception as exc:
+            self.logger.warning(f"Geometry filtering skipped ({exc}); retaining mesh.")
             return mesh
-        out = mesh.submesh([np.flatnonzero(keep)], append=True, repair=False)
-        self.logger.info(
-            f"Dropped {dropped_c} shells floating more than {limit:.1f} m clear of the "
-            f"reconstructed surface ({dropped_f} faces, furthest {worst:.0f} m out)."
-        )
-        return out
 
     def _align_to_ground(self, mesh: trimesh.Trimesh, world: Optional[PersistentWorld]) -> None:
         """

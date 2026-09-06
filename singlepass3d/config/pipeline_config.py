@@ -138,7 +138,7 @@ PRESETS: Dict[str, QualityPreset] = {
         mvs_zncc_win=9,
         tsdf_voxel_m=0.10,
         keyframe_max_frame_gap=8,
-        target_mesh_faces=250000,
+        target_mesh_faces=300000,
         include_walls=True,
     ),
     "high": QualityPreset(

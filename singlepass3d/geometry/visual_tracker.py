@@ -152,9 +152,10 @@ class VisualTracker:
                 needed = self.max_features - len(active_tracks)
                 new_kps = []
                 try:
-                    new_kps = self.detector.detect(curr_gray, mask=mask)
+                    detected = self.detector.detect(curr_gray, mask=mask)
+                    new_kps = list(detected) if detected is not None else []
                 except Exception:
-                    pass
+                    new_kps = []
 
                 # If SIFT/ORB found few keypoints, supplement with goodFeaturesToTrack (Shi-Tomasi)
                 if len(new_kps) < 50:
