@@ -10,6 +10,7 @@ import argparse
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -19,8 +20,27 @@ from urllib.parse import urlparse
 
 # Add SIHBackend to sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+# Ensure stdout and stderr are available even in windowless/detached mode (e.g. pythonw / argus start)
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _argus_dir = Path.home() / ".argus"
+        _argus_dir.mkdir(parents=True, exist_ok=True)
+        _log_fp = open(_argus_dir / "backend.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = _log_fp
+        if sys.stderr is None:
+            sys.stderr = _log_fp
+    except Exception:
+        pass
+
+from scripts.missions_manager import GLOBAL_MISSIONS_MANAGER
 UI_DIR = ROOT_DIR / "ui"
 OUTPUTS_DIR = ROOT_DIR / "outputs"
+DEMO_DIR = ROOT_DIR / "demo"
+
 
 
 class SinglePass3DHTTPHandler(http.server.SimpleHTTPRequestHandler):
@@ -50,6 +70,108 @@ class SinglePass3DHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
+
+        # API: Mission events SSE streaming
+        if path.startswith("/api/missions/") and path.endswith("/events"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                try:
+                    while True:
+                        status = GLOBAL_MISSIONS_MANAGER.get_status(m_id)
+                        if not status:
+                            break
+                        payload = f"data: {json.dumps(status)}\n\n"
+                        self.wfile.write(payload.encode("utf-8"))
+                        self.wfile.flush()
+                        if status.get("status") in ["ready", "failed", "cancelled"]:
+                            break
+                        time.sleep(1.0)
+                except Exception:
+                    pass
+                return
+
+        # API: Mission status polling
+        if path.startswith("/api/missions/") and path.endswith("/status"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                status = GLOBAL_MISSIONS_MANAGER.get_status(m_id)
+                if status:
+                    self.send_json_response(status)
+                else:
+                    self.send_json_response({"error": f"Mission '{m_id}' not found"}, status=404)
+                return
+
+        # API: Mission flight path (GeoJSON LineString)
+        if path.startswith("/api/missions/") and path.endswith("/flight-path"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                fp = GLOBAL_MISSIONS_MANAGER.get_flight_path(m_id)
+                if fp:
+                    self.send_json_response(fp)
+                else:
+                    self.send_json_response({"error": "Flight path not ready or not available"}, status=404)
+                return
+
+        # API: Mission reconstructed 3D model
+        if path.startswith("/api/missions/") and path.endswith("/model"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                model = GLOBAL_MISSIONS_MANAGER.get_model(m_id)
+                if model:
+                    self.send_json_response(model)
+                else:
+                    self.send_json_response({"error": "Model not found"}, status=404)
+                return
+
+        # API: Query model by modelId
+        if path.startswith("/api/models/"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                model_id = parts[2]
+                found = None
+                for m_id, m in GLOBAL_MISSIONS_MANAGER.missions.items():
+                    recon = m.get("reconstruction", {})
+                    if recon.get("modelId") == model_id or m_id == model_id.replace("model_", ""):
+                        found = GLOBAL_MISSIONS_MANAGER.get_model(m_id)
+                        break
+                if found:
+                    self.send_json_response(found)
+                else:
+                    self.send_json_response({"error": f"Model '{model_id}' not found"}, status=404)
+                return
+
+        # API: Health check
+        if path == "/api/health":
+            self.send_json_response({"status": "ok", "service": "SinglePass3D", "timestamp": time.time()})
+            return
+
+        # API: List all missions
+        if path in ("/api/missions", "/api/missions/"):
+            all_missions = list(GLOBAL_MISSIONS_MANAGER.missions.values())
+            self.send_json_response(all_missions)
+            return
+
+        # API: Full Mission object
+        if path.startswith("/api/missions/"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 3:
+                m_id = parts[2]
+                m = GLOBAL_MISSIONS_MANAGER.get_mission(m_id)
+                if m:
+                    self.send_json_response(m)
+                else:
+                    self.send_json_response({"error": f"Mission '{m_id}' not found"}, status=404)
+                return
 
         # API: List all available reconstruction jobs in outputs/
         if path == "/api/jobs":
@@ -129,6 +251,17 @@ class SinglePass3DHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, f"Output file not found: {rel_path}")
                 return
 
+        # Serve files from demo/ directory
+        if path.startswith("/demo/"):
+            rel_path = path[len("/demo/"):]
+            file_path = DEMO_DIR / rel_path
+            if file_path.exists() and file_path.is_file():
+                self._serve_file(file_path)
+                return
+            else:
+                self.send_error(404, f"Demo file not found: {rel_path}")
+                return
+
         # Default: Serve static files from ui/
         target_path = UI_DIR / path.lstrip("/")
         if path == "/" or path == "":
@@ -142,6 +275,89 @@ class SinglePass3DHTTPHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed_url = urlparse(self.path)
         path = parsed_url.path
+
+        # API: Create new Mission
+        if path == "/api/missions":
+            content_length = int(self.headers.get("Content-Length", 0))
+            payload = {}
+            if content_length > 0:
+                try:
+                    payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                except Exception:
+                    payload = {}
+            res = GLOBAL_MISSIONS_MANAGER.create_mission(payload.get("name"))
+            self.send_json_response(res, status=201)
+            return
+
+        # API: Upload Drone Video for Mission
+        if path.startswith("/api/missions/") and path.endswith("/video"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                content_length = int(self.headers.get("Content-Length", 0))
+                content_type = self.headers.get("Content-Type", "")
+
+                try:
+                    body = self.rfile.read(content_length) if content_length > 0 else b""
+                    fname = "drone_flight.mp4"
+                    file_bytes = b""
+
+                    if "multipart/form-data" in content_type:
+                        boundary = None
+                        if "boundary=" in content_type:
+                            boundary = content_type.split("boundary=")[-1].split(";")[0].strip().strip('"').encode("utf-8")
+
+                        if boundary and (b"--" + boundary) in body:
+                            parts_data = body.split(b"--" + boundary)
+                            for part in parts_data:
+                                part = part.strip(b"- \r\n")
+                                if b"\r\n\r\n" in part:
+                                    header_part, file_data = part.split(b"\r\n\r\n", 1)
+                                    header_text = header_part.decode("utf-8", errors="ignore")
+                                    if "filename=" in header_text:
+                                        fn_match = re.search(r'filename=["\']?([^"\';\r\n]+)["\']?', header_text, re.IGNORECASE)
+                                        if fn_match:
+                                            fname = fn_match.group(1).strip()
+                                        file_bytes = file_data
+                                        if file_bytes.endswith(b"\r\n"):
+                                            file_bytes = file_bytes[:-2]
+                                        break
+
+                    if not file_bytes and content_length > 0:
+                        file_bytes = body
+
+                    # Sanitize filename for filesystem safety (prevents Errno 22 on Windows)
+                    fname = Path(fname).name
+                    fname = re.sub(r'[^a-zA-Z0-9._-]', '_', fname).strip()
+                    if not fname or fname.startswith('.'):
+                        fname = f"drone_flight_{int(time.time())}.mp4"
+
+                    res = GLOBAL_MISSIONS_MANAGER.save_video(m_id, fname, file_bytes)
+                    self.send_json_response(res)
+                    return
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    self.send_json_response({"error": f"Failed to save video: {e}"}, status=500)
+                    return
+
+        # API: Start Mission Processing
+        if path.startswith("/api/missions/") and path.endswith("/process"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                res = GLOBAL_MISSIONS_MANAGER.start_processing(m_id)
+                self.send_json_response(res)
+                return
+
+        # API: Cancel Mission Processing
+        if path.startswith("/api/missions/") and path.endswith("/cancel"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 3:
+                m_id = parts[2]
+                res = GLOBAL_MISSIONS_MANAGER.cancel_processing(m_id)
+                self.send_json_response(res)
+                return
 
         # Handle Video / Telemetry Upload from UI
         if path == "/api/upload":

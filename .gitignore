@@ -27,3 +27,10 @@ backups/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Root debug screenshots & scratch artifacts
+/*.png
+/apply_polish.js
+/arrow_path_d.txt
+/arrow_test.svg
+*.orig

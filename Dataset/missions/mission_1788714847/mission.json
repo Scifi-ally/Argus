@@ -1,0 +1,23 @@
+{
+  "id": "mission_1788714847",
+  "name": "Test Upload Mission",
+  "status": "created",
+  "createdAt": "2026-09-06T17:14:07Z",
+  "video": null,
+  "location": null,
+  "flight": null,
+  "processing": {
+    "jobId": null,
+    "stage": "queued",
+    "progress": 0,
+    "message": "Mission initialized"
+  },
+  "reconstruction": {
+    "status": "pending",
+    "footprint": null,
+    "modelId": null,
+    "viewerUrl": null,
+    "modelUrl": null
+  },
+  "error": null
+}

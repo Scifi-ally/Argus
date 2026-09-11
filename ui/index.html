@@ -3,218 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SinglePass3D — Video Input & 3D Model View</title>
-  <meta name="description" content="SinglePass3D: Live Drone Video Input alongside Reconstructed 3D Model" />
-  <link rel="stylesheet" href="styles.css" />
-  
-  <!-- Three.js & Loaders -->
+  <title>Single-Pass 3D Reconstruction</title>
+  <meta name="description" content="Premium UAV single-pass 3D reconstruction — cinematic geospatial visualization" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Share+Tech+Mono&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+
+  <!-- Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+
+  <!-- MapLibre GL JS -->
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 </head>
 <body>
   <div id="app-container">
-    
-    <!-- Top Navigation Header -->
+
+    <!-- Globe Layer (Three.js Earth) — visible initially -->
+    <div id="globe-container"></div>
+
+    <!-- Map Layer (MapLibre GL JS) — hidden initially -->
+    <div id="map-container"></div>
+
+    <!-- Header — minimal, transparent overlay -->
     <header id="app-header">
-      <div class="brand-section">
-        <div class="brand-logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-            <polyline points="2 17 12 22 22 17"></polyline>
-            <polyline points="2 12 12 17 22 12"></polyline>
-          </svg>
-        </div>
-        <h1 class="brand-title">SinglePass3D</h1>
+      <div class="header-brand">
+        <div class="brand-mark"></div>
+        <h1>Single-Pass 3D Reconstruction</h1>
       </div>
-
-      <div class="header-center">
-        <div class="job-select-wrapper">
-          <label class="job-select-label" for="job-selector">Dataset / Job</label>
-          <select id="job-selector">
-            <option value="zurich_mav_reconstruction">zurich_mav_reconstruction (Zurich Urban MAV)</option>
-            <option value="job_001">job_001 (Orbit Drone Demo)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <button class="btn-header active" id="btn-mode-rgb" data-mode="rgb" title="RGB Texture">
-          <span>RGB Texture</span>
-        </button>
-        <button class="btn-header" id="btn-mode-semantics" data-mode="semantics" title="Semantic Segmentation">
-          <span>Semantics</span>
-        </button>
-        <button class="btn-header" id="btn-mode-confidence" data-mode="confidence" title="Confidence Heatmap">
-          <span>Confidence</span>
-        </button>
-        <button class="btn-header" id="btn-mode-normals" data-mode="normals" title="Surface Normals">
-          <span>Normals</span>
-        </button>
-        <button class="btn-header" id="btn-toggle-wireframe" title="Toggle Wireframe">
-          <span>Wireframe</span>
-        </button>
-        <button class="btn-header" id="btn-toggle-pointcloud" title="Toggle Point Cloud Mode">
-          <span>Point Cloud</span>
-        </button>
+      <div class="header-right">
+        <span class="header-status" id="header-status"></span>
+        <button class="btn-demo" id="btn-demo">Demo Flight</button>
+        <button class="btn-upload" id="btn-upload">NEW FLIGHT</button>
+        <input type="file" id="file-input" accept="video/*,.srt" style="display:none" />
       </div>
     </header>
 
-    <!-- Side-by-Side Split Workspace -->
-    <main id="split-view">
-      
-      <!-- Left 50%: Live Video / Drone Frame Input Stream -->
-      <section class="view-panel" id="video-panel">
-        <div class="panel-header-tag">
-          <span class="tag-dot"></span>
-          <span>Drone Video Input Stream</span>
+    <!-- Upload Overlay -->
+    <div id="upload-overlay">
+      <button class="upload-close-btn" id="upload-close">&times;</button>
+      <div class="upload-zone" id="upload-zone">
+        <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-secondary);">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <div class="upload-zone-title">Upload UAV Video</div>
+        <div class="upload-zone-subtitle">
+          Drag and drop a drone video with embedded GPS telemetry<br>
+          or an SRT subtitle file with flight coordinates
         </div>
+        <button class="btn-demo" id="btn-demo-zone" style="margin-top: 16px;">Load Demo Flight</button>
+      </div>
+    </div>
 
-        <div id="video-display-wrapper">
-          <img id="drone-frame-img" src="" alt="Drone Video Frame Stream" />
-          <video id="drone-video-el" playsinline muted loop></video>
+    <!-- Processing Status Indicator -->
+    <div id="processing-status">
+      <div class="processing-pill">
+        <div class="processing-spinner"></div>
+        <span class="processing-text" id="processing-text">Processing…</span>
+      </div>
+    </div>
+
+    <!-- Route Info Panel (top-right, after route loads) -->
+    <div id="route-info">
+      <div class="route-info-panel">
+        <div class="route-info-row">
+          <span class="route-info-label">Waypoints</span>
+          <span class="route-info-value" id="info-waypoints">—</span>
         </div>
-
-        <!-- Telemetry HUD Overlay -->
-        <div class="telemetry-hud" id="telemetry-hud-box">
-          <div id="hud-frame">Frame: 000 / 040</div>
-          <div id="hud-timestamp">Time: 0.00s</div>
-          <div id="hud-gps">GPS Datum: 47.384357° N, 8.545178° E (464.9m)</div>
+        <div class="route-info-row">
+          <span class="route-info-label">Duration</span>
+          <span class="route-info-value" id="info-duration">—</span>
         </div>
-      </section>
-
-      <!-- Right 50%: 3D Reconstructed Mesh & Camera Trajectory -->
-      <section class="view-panel right-panel" id="model-panel">
-        <div class="panel-header-tag">
-          <span class="tag-dot model"></span>
-          <span>Reconstructed 3D Model & Trajectory</span>
+        <div class="route-info-row">
+          <span class="route-info-label">Altitude</span>
+          <span class="route-info-value" id="info-altitude">—</span>
         </div>
-
-        <div class="model-action-bar">
-          <div class="interaction-mode-group">
-            <button class="mode-toggle-btn active" id="btn-mode-orbit" title="Orbit Camera: rotate camera viewpoint">
-              <span>Orbit View</span>
-            </button>
-            <button class="mode-toggle-btn" id="btn-mode-rot-model" title="Rotate Model: Left-drag rotates ONLY the 3D model (Camera & page stay fixed)">
-              <span>Rotate Model</span>
-            </button>
-          </div>
-
-          <div class="orientation-dropdown-wrapper">
-            <select id="view-preset-selector" class="view-select" title="Camera Viewpoint Presets">
-              <option value="aerial">Aerial 45°</option>
-              <option value="top">Top-Down</option>
-              <option value="front">Front View</option>
-              <option value="side">Side View</option>
-              <option value="isometric">Isometric</option>
-            </select>
-          </div>
-
-          <button class="action-btn active" id="btn-toggle-grid" title="Toggle Ground Grid">
-            <span>Grid</span>
-          </button>
-          <button class="action-btn active" id="btn-toggle-trajectory" title="Toggle Flight Trajectory">
-            <span>Trajectory</span>
-          </button>
-          <button class="action-btn" id="btn-tool-ruler" title="3D Ruler: Click 2 points to measure distance & height (m)">
-            <span>📏 Ruler</span>
-          </button>
-          <button class="action-btn" id="btn-tool-analytics" title="Spatial Analytics: View area, volume, and GIS metrics">
-            <span>📊 Analytics</span>
-          </button>
-          <button class="action-btn" id="btn-reset-cam" title="Reset View & Orientation">
-            <span>Reset</span>
-          </button>
+        <div class="route-info-row">
+          <span class="route-info-label">Coverage</span>
+          <span class="route-info-value lime" id="info-coverage">—</span>
         </div>
-
-        <!-- Floating Spatial Measurements & Analytics Card -->
-        <div class="spatial-analytics-card" id="spatial-card" style="display: none;">
-          <div class="rot-card-header">
-            <span class="rot-card-title">📏 3D Spatial Measurements</span>
-            <button class="rot-card-reset" id="btn-close-spatial">✕</button>
-          </div>
-          <div class="spatial-content">
-            <div class="measure-hud" id="measure-hud-live">
-              <div class="measure-instruction" id="measure-instruction">Click 2 points on the 3D model to measure distance & height.</div>
-              <div class="measure-results" id="measure-results" style="display: none;">
-                <div class="metric-row"><span class="metric-label">3D Distance:</span> <strong id="val-dist-3d">0.00 m</strong></div>
-                <div class="metric-row"><span class="metric-label">Horizontal Span:</span> <span id="val-dist-xy">0.00 m</span></div>
-                <div class="metric-row"><span class="metric-label">Vertical Height (ΔZ):</span> <strong id="val-dist-z" style="color: #38bdf8;">0.00 m</strong></div>
-                <button class="rot-card-reset" id="btn-clear-ruler" style="margin-top: 6px;">Clear Measurement</button>
-              </div>
-            </div>
-            <div class="rot-divider" style="margin: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);"></div>
-            <div class="gis-metrics-section" id="gis-metrics-section">
-              <div class="rot-card-title" style="font-size: 11px; margin-bottom: 6px; color: #94a3b8;">Tactical Reconnaissance Metrics</div>
-              <div class="metric-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-                <div class="grid-item"><span style="color: #64748b; display:block;">Footprint Area</span><strong id="val-footprint-area" style="color: #f8fafc;">-- m²</strong></div>
-                <div class="grid-item"><span style="color: #64748b; display:block;">Est. Volume</span><strong id="val-built-volume" style="color: #f8fafc;">-- m³</strong></div>
-                <div class="grid-item"><span style="color: #64748b; display:block;">Ground GSD</span><strong id="val-gsd" style="color: #f8fafc;">5.0 cm/px</strong></div>
-                <div class="grid-item"><span style="color: #64748b; display:block;">Elevation Span</span><strong id="val-elev-span" style="color: #f8fafc;">-- m</strong></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Floating Model Orientation Control Card -->
-        <div class="model-rotation-card" id="model-rot-card">
-          <div class="rot-card-header">
-            <span class="rot-card-title">Model Rotation</span>
-            <button class="rot-card-reset" id="btn-quick-reset-rot" title="Reset Rotation to 0°">Reset</button>
-          </div>
-          <div class="rot-slider-row">
-            <label for="slider-rot-z">Yaw (Z)</label>
-            <input type="range" id="slider-rot-z" min="-180" max="180" step="1" value="0" />
-            <span class="deg-val" id="val-rot-z">0°</span>
-          </div>
-          <div class="rot-slider-row">
-            <label for="slider-rot-x">Pitch (X)</label>
-            <input type="range" id="slider-rot-x" min="-90" max="90" step="1" value="0" />
-            <span class="deg-val" id="val-rot-x">0°</span>
-          </div>
-          <div class="rot-slider-row">
-            <label for="slider-rot-y">Roll (Y)</label>
-            <input type="range" id="slider-rot-y" min="-90" max="90" step="1" value="0" />
-            <span class="deg-val" id="val-rot-y">0°</span>
-          </div>
-          <div class="quick-rot-buttons">
-            <button class="btn-micro" data-rot-z="-90" title="Rotate -90°">⟲ 90°</button>
-            <button class="btn-micro" data-rot-z="-45" title="Rotate -45°">⟲ 45°</button>
-            <button class="btn-micro" data-rot-z="-15" title="Rotate -15°">⟲ 15°</button>
-            <button class="btn-micro" data-rot-z="15" title="Rotate +15°">15° ⟳</button>
-            <button class="btn-micro" data-rot-z="45" title="Rotate +45°">45° ⟳</button>
-            <button class="btn-micro" data-rot-z="90" title="Rotate +90°">90° ⟳</button>
-            <button class="btn-micro" data-rot-z="180" title="Rotate 180°">180°</button>
-          </div>
-        </div>
-
-        <canvas id="webgl-canvas"></canvas>
-      </section>
-
-      <!-- Bottom Synchronized Flight Timeline Scrubber -->
-      <div class="sync-scrubber-bar">
-        <button class="play-btn" id="btn-play-pause" title="Play/Pause Video & Flight Animation">
-          <svg id="icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          <svg id="icon-pause" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        </button>
-
-        <div class="scrubber-info-col">
-          <div class="scrubber-labels">
-            <span id="label-cur-frame">Frame: 0 / 40</span>
-            <span id="label-cur-time">0.00s</span>
-          </div>
-          <input type="range" id="frame-slider" min="0" max="39" value="0" step="1" />
+        <div class="route-info-row">
+          <span class="route-info-label">Status</span>
+          <span class="route-info-value lime" id="info-status">IDLE</span>
         </div>
       </div>
+    </div>
 
-    </main>
+    <!-- Error State -->
+    <div id="error-state">
+      <div class="error-pill">
+        <span class="error-pill-text" id="error-text">Error</span>
+      </div>
+    </div>
 
-    <!-- Toast Notifications -->
+    <!-- Reconstruction Timeline — pre-mounted, initially invisible -->
+    <div id="timeline-bar">
+      <div class="timeline-inner">
+        <!-- Header Row -->
+        <div class="timeline-header">
+          <div class="timeline-left">
+            <button class="timeline-play-btn" id="btn-play" title="Play / Pause">
+              <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <div class="timeline-time">
+              <span id="tl-current-time">00:00</span>
+              <span class="sep">/</span>
+              <span id="tl-total-time">00:00</span>
+            </div>
+          </div>
+          <div class="timeline-right">
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">Frames</span>
+              <span class="timeline-stat-value" id="tl-frames">0</span>
+            </div>
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">Captured</span>
+              <span class="timeline-stat-value lime" id="tl-captured">0%</span>
+            </div>
+            <div class="timeline-stat">
+              <span class="timeline-stat-label">Coverage</span>
+              <span class="timeline-stat-value lime" id="tl-coverage">0%</span>
+            </div>
+          </div>
+        </div>
+        <!-- Scrubber -->
+        <div class="timeline-scrubber" id="timeline-scrubber">
+          <div class="timeline-progress" id="timeline-progress" style="width: 0%"></div>
+          <input type="range" id="timeline-slider" min="0" max="100" value="0" step="1" />
+        </div>
+        <!-- Status Row -->
+        <div class="timeline-status-row">
+          <span class="timeline-status-label" id="tl-status-label">Flight Telemetry</span>
+          <div class="timeline-status-badge">
+            <span class="timeline-status-dot"></span>
+            <span id="tl-status-text">READY</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
     <div id="toast-container"></div>
 
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

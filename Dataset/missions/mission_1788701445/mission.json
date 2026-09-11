@@ -1,0 +1,23 @@
+{
+  "id": "mission_1788701445",
+  "name": "i_want_a_video__\u00a0Aerial_drone",
+  "status": "created",
+  "createdAt": "2026-09-06T13:30:45Z",
+  "video": null,
+  "location": null,
+  "flight": null,
+  "processing": {
+    "jobId": null,
+    "stage": "queued",
+    "progress": 0,
+    "message": "Mission initialized"
+  },
+  "reconstruction": {
+    "status": "pending",
+    "footprint": null,
+    "modelId": null,
+    "viewerUrl": null,
+    "modelUrl": null
+  },
+  "error": null
+}

@@ -1,0 +1,27 @@
+{
+  "id": "mission_1788700267",
+  "name": "Drone Test",
+  "status": "uploaded",
+  "createdAt": "2026-09-06T13:11:07Z",
+  "video": {
+    "filename": "drone_flight.mp4",
+    "size": 15,
+    "duration": 30.0
+  },
+  "location": null,
+  "flight": null,
+  "processing": {
+    "jobId": null,
+    "stage": "uploaded",
+    "progress": 0,
+    "message": "Video upload complete"
+  },
+  "reconstruction": {
+    "status": "pending",
+    "footprint": null,
+    "modelId": null,
+    "viewerUrl": null,
+    "modelUrl": null
+  },
+  "error": null
+}
